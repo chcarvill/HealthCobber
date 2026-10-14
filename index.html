@@ -379,44 +379,71 @@
     .avoid-item-input { font-size: 12.5px; }
     .avoid-add-item-btn { margin-top: 10px; }
 
-    /* Why Avoid? — symptoms with room for the underlying scientific mechanism */
-    .whyavoid-item-card {
-      background: var(--bg);
-      border: 0.5px solid var(--border);
-      border-radius: var(--radius);
-      padding: 14px 16px;
-      margin-bottom: 12px;
+    /* Nav: 9 tabs — let it scroll sideways on narrow screens */
+    nav.tabs { overflow-x: auto; }
+    .nav-btn { flex: 1 0 auto; min-width: 54px; padding-left: 8px; padding-right: 8px; }
+
+    /* Shopping list */
+    .shop-seg { display: flex; gap: 4px; background: var(--surface); border-radius: var(--radius-sm); padding: 3px; margin-bottom: 10px; }
+    .shop-seg button {
+      flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px;
+      padding: 8px 6px; font-size: 12px; font-weight: 500; font-family: inherit;
+      border: none; background: transparent; color: var(--muted); border-radius: 6px; cursor: pointer;
     }
-    .whyavoid-symptoms {
-      margin-top: 10px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
+    .shop-seg button.active { background: var(--bg); color: var(--text); box-shadow: 0 0 0 0.5px var(--border); }
+    .shop-search-input {
+      width: 100%; font-size: 14px; font-family: inherit; padding: 10px 12px;
+      border: 0.5px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--bg); color: var(--text);
     }
-    .whyavoid-symptom-block {
-      padding-left: 10px;
-      border-left: 2px solid rgba(226,75,74,0.25);
+    #shop-results { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+    .shop-result {
+      display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+      padding: 8px 10px; font-size: 13px; font-family: inherit; color: var(--text);
+      background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-sm); cursor: pointer;
     }
-    .whyavoid-symptom-header {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      margin-bottom: 6px;
+    .shop-result:disabled { opacity: 0.5; cursor: default; }
+    .shop-result:not(:disabled):hover { background: var(--surface); }
+    .shop-result-name { flex: 1; }
+    .shop-cat-tag { font-size: 10px; color: var(--muted); margin-left: 4px; }
+    .shop-mark {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 20px; height: 20px; border-radius: 50%; font-size: 13px; flex-shrink: 0;
     }
-    .whyavoid-symptom-name { font-size: 12.5px; font-weight: 600; }
-    .whyavoid-mechanism-input {
-      width: 100%;
-      min-height: 110px;
-      font-size: 12.5px;
-      line-height: 1.5;
-      resize: vertical;
-      font-family: inherit;
-      padding: 10px 12px;
-      border: 0.5px solid var(--border);
-      border-radius: var(--radius-sm);
-      background: #fff;
+    .shop-mark-avoid { background: var(--red-lt); color: var(--red); }
+    .shop-mark-good  { background: var(--green-lt); color: var(--green); }
+    .shop-suggest-title { font-size: 11px; font-weight: 600; color: var(--muted); margin: 12px 0 6px; display: flex; align-items: center; gap: 4px; }
+    .shop-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .shop-chip {
+      display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px; font-size: 12px; font-family: inherit;
+      background: var(--green-lt); color: var(--green-dk); border: 0.5px solid var(--green); border-radius: 999px; cursor: pointer;
     }
-    .whyavoid-add-symptom-btn { margin-top: 10px; }
+    .shop-section { margin-bottom: 14px; }
+    .shop-section-title { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+    .shop-cat-label { font-size: 11px; font-weight: 600; color: var(--muted); margin: 12px 0 4px; display: flex; align-items: center; gap: 5px; text-transform: uppercase; letter-spacing: 0.3px; }
+    .shop-empty { font-size: 13px; color: var(--muted); padding: 6px 0; }
+    .shop-item { border-bottom: 0.5px solid var(--border); padding: 6px 0; }
+    .shop-item:last-child { border-bottom: none; }
+    .shop-row { display: flex; align-items: center; gap: 8px; }
+    .shop-row.shop-avoid .shop-name { color: var(--red-dk); }
+    .shop-row.shop-done .shop-name { text-decoration: line-through; color: var(--muted); }
+    .shop-name { flex: 1; font-size: 14px; }
+    .shop-tick, .shop-mini {
+      background: none; border: none; cursor: pointer; color: var(--muted); font-size: 20px; padding: 2px; display: flex; align-items: center;
+    }
+    .shop-mini { font-size: 16px; }
+    .shop-mini:hover { color: var(--text); }
+    .shop-tick:disabled { cursor: not-allowed; color: var(--amber); opacity: 0.8; }
+    .shop-check {
+      margin-top: 6px; font-size: 11.5px; line-height: 1.5; color: var(--amber-dk); background: var(--amber-lt);
+      border: 0.5px solid rgba(186,117,23,0.4); border-radius: var(--radius-sm); padding: 7px 10px;
+    }
+    .shop-sim { margin-top: 4px; }
+    .shop-check-actions { display: flex; gap: 6px; margin-top: 7px; flex-wrap: wrap; }
+    .shop-check-actions button {
+      display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px; font-size: 11.5px; font-family: inherit;
+      background: var(--bg); color: var(--amber-dk); border: 0.5px solid rgba(186,117,23,0.5); border-radius: var(--radius-sm); cursor: pointer;
+    }
     .food-row:last-of-type { border-bottom: none; }
     .num-input {
       width: 40px !important;
@@ -795,7 +822,7 @@
       <i class="ti ti-salad" aria-hidden="true"></i>My foods
     </button>
     <button class="nav-btn" onclick="switchTab('mealplan'); renderPortionsTab()" id="tab-mealplan">
-      <i class="ti ti-scale" aria-hidden="true"></i>Portns
+      <i class="ti ti-scale" aria-hidden="true"></i>Portions
     </button>
     <button class="nav-btn" onclick="switchTab('recs')" id="tab-recs">
       <i class="ti ti-calendar-check" aria-hidden="true"></i>Recs
@@ -806,8 +833,8 @@
     <button class="nav-btn" onclick="switchTab('avoid')" id="tab-avoid">
       <i class="ti ti-ban" aria-hidden="true"></i>Avoid
     </button>
-    <button class="nav-btn" onclick="switchTab('whyavoid')" id="tab-whyavoid">
-      <i class="ti ti-flask" aria-hidden="true"></i>Why Avoid?
+    <button class="nav-btn" onclick="switchTab('shop')" id="tab-shop">
+      <i class="ti ti-shopping-cart" aria-hidden="true"></i>Shop
     </button>
     <button class="nav-btn" onclick="switchTab('timing')" id="tab-timing">
       <i class="ti ti-clock" aria-hidden="true"></i>Timing
@@ -985,22 +1012,24 @@
     </button>
   </section>
 
-  <!-- WHY AVOID? PANEL -->
-  <section class="panel" id="panel-whyavoid" aria-label="Why avoid — the science behind recurring symptoms">
-    <div class="info-box" style="margin-bottom:14px;background:var(--red-lt);color:var(--red-dk);border:0.5px solid rgba(226,75,74,0.3);">
-      <i class="ti ti-flask" style="font-size:14px;vertical-align:-2px;margin-right:4px;" aria-hidden="true"></i>
-      List a specific food or a broad category, then add each symptom you've <strong>recurringly</strong> experienced from it.
-      Under each symptom, write out the actual scientific mechanism — what's physiologically happening to cause it.
-      This is your own evidence file, in your own words, for why it's genuinely worth staying away from.
+  <!-- SHOPPING PANEL -->
+  <section class="panel" id="panel-shop" aria-label="Shopping list">
+    <div class="info-box" style="margin-bottom:14px;">
+      <i class="ti ti-shopping-cart" style="font-size:14px;vertical-align:-2px;margin-right:4px;" aria-hidden="true"></i>
+      Pick items from the catalog. <strong>For me</strong> is checked against your <strong>Avoid</strong> tab (red cross) and your highly rated foods (green tick). <strong>For others</strong> is left unchecked.
     </div>
-    <div id="whyavoid-list"></div>
-    <button class="add-food-btn" onclick="addWhyAvoidItem()" style="margin-top:10px;margin-bottom:14px;border-color:rgba(226,75,74,0.4);color:var(--red-dk);">
-      <i class="ti ti-plus" style="font-size:14px;"></i>Add a food item or category
-    </button>
-    <button class="btn-email" onclick="emailWhyAvoidList()">
-      <i class="ti ti-mail" aria-hidden="true"></i>Email this list
+    <div class="card" style="margin-bottom:14px;">
+      <div class="shop-seg" id="shop-target"></div>
+      <input id="shop-search" class="shop-search-input" type="text" placeholder="Search groceries, or type to add your own…" autocomplete="off" oninput="renderShopResults()" />
+      <div id="shop-results"></div>
+      <div id="shop-suggest"></div>
+    </div>
+    <div id="shop-lists"></div>
+    <button class="add-food-btn" onclick="clearDoneShop()">
+      <i class="ti ti-trash" style="font-size:14px;"></i>Clear ticked items
     </button>
   </section>
+  <datalist id="catalog-names"></datalist>
 
   <!-- MY HEALTH PANEL -->
   <section class="panel" id="panel-health" aria-label="My health guidance">

@@ -33,25 +33,24 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// Network-first for navigation/HTML so you always get the latest app.js
-// logic; cache-first fallback for everything else so it still opens offline.
+// Network-first for everything, so updated app.js / index.html / sync.js always
+// arrive when you're online; the cache is only a fallback for offline use.
+// Supabase (sync) requests are never cached.
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
-
-  if (event.request.mode === "navigate") {
-    event.respondWith(
-      fetch(event.request).catch(() => caches.match("./index.html"))
-    );
-    return;
-  }
+  if (new URL(event.request.url).hostname.endsWith("supabase.co")) return;
 
   event.respondWith(
-    caches.match(event.request).then(cached =>
-      cached || fetch(event.request).then(res => {
-        const resClone = res.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(event.request, resClone));
+    fetch(event.request)
+      .then(res => {
+        const copy = res.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy)).catch(() => {});
         return res;
-      }).catch(() => cached)
-    )
+      })
+      .catch(() =>
+        caches.match(event.request).then(cached =>
+          cached || (event.request.mode === "navigate" ? caches.match("./index.html") : undefined)
+        )
+      )
   );
 });

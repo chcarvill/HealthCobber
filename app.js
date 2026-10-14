@@ -19,8 +19,6 @@ let bodyData = {};
 let tryItems     = [];  // [{ name, reason }]
 let avoidGroups  = [];  // [{ name, reason, items: [foodName, ...] }] — a shared reason across a cluster of foods/drinks
 let triggerItems = [];  // [{ name, reason }] — situations/feelings that mean it's not really hunger
-let whyAvoidItems = []; // [{ name, symptoms: [{ name, mechanism }] }] — specific items/categories with
-                         // recurring symptoms and the underlying scientific mechanism behind each one
 
 // ── Local storage ────────────────────────────────────────────────────────────
 
@@ -31,7 +29,7 @@ const LS_TRY           = "nutriwise_try";
 const LS_AVOID         = "nutriwise_avoid";
 const LS_TRIGGERS      = "nutriwise_triggers";
 const LS_TRIGGERS_SEED = "nutriwise_triggers_seeded";
-const LS_WHYAVOID      = "nutriwise_whyavoid";
+const LS_SHOP          = "nutriwise_shop";
 
 const MEAL_CYCLE = ["", "B", "L", "D", "LD"];
 const MEAL_LABELS = { "": "—", "B": "B", "L": "L", "D": "D", "LD": "LD" };
@@ -43,7 +41,7 @@ function saveToStorage() {
     localStorage.setItem(LS_TRY,      JSON.stringify(tryItems));
     localStorage.setItem(LS_AVOID,    JSON.stringify(avoidGroups));
     localStorage.setItem(LS_TRIGGERS, JSON.stringify(triggerItems));
-    localStorage.setItem(LS_WHYAVOID, JSON.stringify(whyAvoidItems));
+    localStorage.setItem(LS_SHOP,     JSON.stringify({ items: shopItems, custom: customCatalog, target: shopTarget }));
   } catch (e) {}
 }
 
@@ -76,8 +74,13 @@ function loadFromStorage() {
     if (av) avoidGroups = migrateAvoidData(JSON.parse(av));
     const tg = localStorage.getItem(LS_TRIGGERS);
     if (tg) triggerItems = JSON.parse(tg);
-    const wa = localStorage.getItem(LS_WHYAVOID);
-    if (wa) whyAvoidItems = migrateWhyAvoidData(JSON.parse(wa));
+    const sh = localStorage.getItem(LS_SHOP);
+    if (sh) {
+      const d = JSON.parse(sh);
+      shopItems     = Array.isArray(d.items)  ? d.items  : [];
+      customCatalog = Array.isArray(d.custom) ? d.custom : [];
+      shopTarget    = d.target === "others" ? "others" : "me";
+    }
     seedTriggersIfNeeded();
   } catch (e) {}
 }
@@ -104,11 +107,11 @@ function switchTab(t) {
   document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
   document.getElementById("panel-" + t).classList.add("active");
   document.getElementById("tab-" + t).classList.add("active");
-  if (t === "try")      renderTryList();
-  if (t === "avoid")    renderAvoidList();
-  if (t === "whyavoid") renderWhyAvoidList();
-  if (t === "health")   renderHealthPanel();
-  if (t === "timing")   renderTimingPanel();
+  if (t === "try")    renderTryList();
+  if (t === "avoid")  { refreshCatalogDatalist(); renderAvoidList(); }
+  if (t === "shop")   renderShopTab();
+  if (t === "health") renderHealthPanel();
+  if (t === "timing") renderTimingPanel();
 }
 
 // ── BMI calculation ──────────────────────────────────────────────────────────
@@ -187,18 +190,6 @@ function migrateAvoidData(raw) {
   return raw
     .filter(item => item && (item.name || item.reason))
     .map(item => ({ name: item.name || "", reason: item.reason || "", items: [item.name || ""] }));
-}
-
-function migrateWhyAvoidData(raw) {
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .filter(item => item && typeof item === "object")
-    .map(item => ({
-      name: item.name || "",
-      symptoms: Array.isArray(item.symptoms)
-        ? item.symptoms.map(s => ({ name: (s && s.name) || "", mechanism: (s && s.mechanism) || "" }))
-        : []
-    }));
 }
 
 function getAvoidMatch(name) {
@@ -697,7 +688,7 @@ function renderAvoidList() {
       <div class="avoid-group-items">
         ${(group.items || []).map((name, ii) => `
           <div class="avoid-item-row">
-            <input class="avoid-item-input" type="text" placeholder="Food or drink name…" value="${name || ""}"
+            <input class="avoid-item-input" type="text" list="catalog-names" placeholder="Pick from the catalog or type…" value="${name || ""}"
               oninput="updateAvoidGroupItem(${gi},${ii},this.value)" />
             <button class="try-del-btn" onclick="removeAvoidGroupItem(${gi},${ii})" aria-label="Remove item">
               <i class="ti ti-x"></i>
@@ -768,108 +759,6 @@ function emailAvoidList() {
   const body = buildAvoidListText();
   if (!body) { alert("No foods in your avoid list yet."); return; }
   openMailto("NutriWise — Foods & Drinks to Avoid", body);
-}
-
-// ── Why Avoid? — the science behind recurring symptoms ───────────────────────
-// A separate list from "Foods to Avoid": each entry here is a specific food or
-// a broad category, and underneath it a growing set of symptoms you've
-// recurringly noticed — each with room to write out the actual scientific
-// mechanism behind why that symptom happens. This is the "evidence" layer:
-// somewhere to properly reason through *why* something's a no-go, rather than
-// just flagging that it is.
-
-function renderWhyAvoidList() {
-  const el = document.getElementById("whyavoid-list");
-  if (!el) return;
-  if (!whyAvoidItems.length) {
-    el.innerHTML = `<p style="font-size:13px;color:var(--muted);padding:8px 0;">No items added yet — tap below to start building out the science behind what you avoid.</p>`;
-    return;
-  }
-  el.innerHTML = whyAvoidItems.map((item, ii) => `
-    <div class="whyavoid-item-card">
-      <div class="avoid-group-header">
-        <input class="try-food-input avoid-group-name" type="text" placeholder="Food item or broad category (e.g. Sugary drinks, Refined sugar)…" value="${item.name || ""}"
-          oninput="updateWhyAvoidItem(${ii},'name',this.value)" />
-        <button class="try-del-btn" onclick="removeWhyAvoidItem(${ii})" aria-label="Remove item" title="Remove this item and all its symptoms">
-          <i class="ti ti-trash"></i>
-        </button>
-      </div>
-      <div class="whyavoid-symptoms">
-        ${(item.symptoms || []).map((s, si) => `
-          <div class="whyavoid-symptom-block">
-            <div class="whyavoid-symptom-header">
-              <input class="try-food-input whyavoid-symptom-name" type="text" placeholder="Symptom (e.g. Bloating, Energy crash, Joint flare)…" value="${s.name || ""}"
-                oninput="updateWhyAvoidSymptom(${ii},${si},'name',this.value)" />
-              <button class="try-del-btn" onclick="removeWhyAvoidSymptom(${ii},${si})" aria-label="Remove symptom">
-                <i class="ti ti-x"></i>
-              </button>
-            </div>
-            <textarea class="whyavoid-mechanism-input" placeholder="The precise scientific mechanism — what's actually happening physiologically to cause this symptom…"
-              oninput="updateWhyAvoidSymptom(${ii},${si},'mechanism',this.value)">${s.mechanism || ""}</textarea>
-          </div>`).join("")}
-      </div>
-      <button class="add-food-btn whyavoid-add-symptom-btn" onclick="addWhyAvoidSymptom(${ii})">
-        <i class="ti ti-plus" style="font-size:13px;"></i>Add a symptom
-      </button>
-    </div>`).join("");
-}
-
-function addWhyAvoidItem() {
-  whyAvoidItems.push({ name: "", symptoms: [{ name: "", mechanism: "" }] });
-  renderWhyAvoidList();
-  saveToStorage();
-}
-
-function removeWhyAvoidItem(ii) {
-  whyAvoidItems.splice(ii, 1);
-  renderWhyAvoidList();
-  saveToStorage();
-}
-
-function updateWhyAvoidItem(ii, field, val) {
-  whyAvoidItems[ii][field] = val;
-  saveToStorage();
-}
-
-function addWhyAvoidSymptom(ii) {
-  whyAvoidItems[ii].symptoms.push({ name: "", mechanism: "" });
-  renderWhyAvoidList();
-  saveToStorage();
-}
-
-function removeWhyAvoidSymptom(ii, si) {
-  whyAvoidItems[ii].symptoms.splice(si, 1);
-  renderWhyAvoidList();
-  saveToStorage();
-}
-
-function updateWhyAvoidSymptom(ii, si, field, val) {
-  whyAvoidItems[ii].symptoms[si][field] = val;
-  saveToStorage();
-}
-
-function buildWhyAvoidListText() {
-  const valid = whyAvoidItems
-    .map(item => ({ ...item, symptoms: (item.symptoms || []).filter(s => s.name && s.name.trim()) }))
-    .filter(item => (item.name && item.name.trim()) || item.symptoms.length);
-  if (!valid.length) return null;
-  const lines = ["NUTRIWISE — WHY AVOID? (THE SCIENCE)", "=".repeat(40), ""];
-  valid.forEach((item, i) => {
-    lines.push(`${i + 1}. ${item.name || "(Unnamed item)"}`);
-    item.symptoms.forEach(s => {
-      lines.push(`   • ${s.name}`);
-      if (s.mechanism) lines.push(`     ${s.mechanism}`);
-    });
-    lines.push("");
-  });
-  lines.push("-".repeat(40), "Generated by NutriWise — for informational purposes only.", "Consult a qualified dietitian for personalised medical nutrition advice.");
-  return lines.join("\n");
-}
-
-function emailWhyAvoidList() {
-  const body = buildWhyAvoidListText();
-  if (!body) { alert("No items added yet."); return; }
-  openMailto("NutriWise — Why Avoid?", body);
 }
 
 // ── Timing — when not to eat ─────────────────────────────────────────────────
@@ -1068,7 +957,6 @@ function emailEverything() {
     buildFoodsDataText(),
     buildTryListText(),
     buildAvoidListText(),
-    buildWhyAvoidListText(),
     buildTriggerListText()
   ].filter(Boolean); // drop any section with no data yet
 
@@ -1330,11 +1218,312 @@ window.addAvoidGroupItem     = addAvoidGroupItem;
 window.removeAvoidGroupItem  = removeAvoidGroupItem;
 window.updateAvoidGroupItem  = updateAvoidGroupItem;
 window.emailAvoidList        = emailAvoidList;
+window.setShopTarget        = setShopTarget;
+window.renderShopResults    = renderShopResults;
+window.shopPick             = shopPick;
+window.shopAddSuggestion    = shopAddSuggestion;
+window.toggleShopDone       = toggleShopDone;
+window.confirmShopCheck     = confirmShopCheck;
+window.moveShopItem         = moveShopItem;
+window.removeShopItem       = removeShopItem;
+window.clearDoneShop        = clearDoneShop;
 window.selectCheckin     = selectCheckin;
 window.addTriggerItem    = addTriggerItem;
 window.removeTriggerItem = removeTriggerItem;
 window.updateTriggerItem = updateTriggerItem;
 window.emailTriggerList  = emailTriggerList;
+
+// ── Shopping list ────────────────────────────────────────────────────────────
+// Two sections: "For me" (checked against Avoid / highly rated foods / Try) and
+// "For others" (no checks). Items are picked from a catalog; anything typed that
+// isn't in the catalog is a custom item and must be confirmed against the Avoid
+// tab before it can be ticked off (in "For me" only).
+
+const SHOP_CATS = CATEGORIES.concat([{ id: "other", label: "Other", icon: "ti-shopping-bag" }]);
+
+const BASE_CATALOG = {
+  snacks:     ["Chocolate","Dark chocolate","Potato chips","Corn chips","Biscuits","Crackers","Muesli bars","Popcorn","Ice cream","Lollies","Mixed nuts","Rice cakes","Cake","Pretzels"],
+  drinks:     ["Water","Sparkling water","Coke","Pepsi","Sprite","Fanta","Solo","Cola","Diet cola","Lemonade","Cordial","Energy drink","Red Bull","V Energy","Sports drink","Powerade","Gatorade","Orange juice","Apple juice","Iced tea","Flavoured milk","Hot chocolate","Coffee","Tea","Kombucha","Beer","Wine"],
+  vegetables: ["Broccoli","Carrots","Spinach","Lettuce","Tomatoes","Cucumber","Capsicum","Onions","Garlic","Zucchini","Cauliflower","Pumpkin","Sweet potato","Potatoes","Mushrooms","Cabbage","Celery","Corn","Peas","Green beans","Asparagus","Eggplant","Kale","Beetroot"],
+  fruits:     ["Apples","Bananas","Oranges","Mandarins","Grapes","Strawberries","Blueberries","Mixed berries","Watermelon","Pears","Mangoes","Pineapple","Kiwi fruit","Lemons","Avocado","Peaches"],
+  legumes:    ["Lentils","Chickpeas","Kidney beans","Black beans","Baked beans","Cannellini beans","Split peas","Tofu","Edamame"],
+  starches:   ["Bread","Wholemeal bread","Rice","Brown rice","Pasta","Oats","Cereal","Noodles","Wraps","Couscous","Quinoa","Crumpets","Bagels","Muffins","Flour"],
+  protein:    ["Chicken breast","Chicken thighs","Beef mince","Steak","Lamb","Pork","Bacon","Sausages","Ham","Turkey","Salmon","White fish","Tuna (canned)","Prawns","Eggs"],
+  dairy:      ["Milk","Soy milk","Almond milk","Oat milk","Cheese","Cheddar cheese","Feta","Cottage cheese","Yoghurt","Greek yoghurt","Butter","Cream"],
+  condiments: ["Tomato sauce","BBQ sauce","Sweet chilli sauce","Mayonnaise","Mustard","Soy sauce","Pasta sauce","Salad dressing","Olive oil","Vinegar","Peanut butter","Jam","Honey","Vegemite","Hummus","Curry paste","Stock","Salt"]
+};
+
+let shopItems     = [];   // [{ id, name, catId, section: "me"|"others", custom, checkedAvoid, done }]
+let customCatalog = [];   // [{ name, catId }] — items you added that weren't in the catalog
+let shopTarget    = "me"; // which section new items are added to
+let shopResults   = [];
+
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, ch => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[ch]));
+}
+function normName(s) { return (s || "").trim().toLowerCase(); }
+
+function getCatalog() {
+  const seen = new Set();
+  const out = [];
+  const add = (name, catId, custom) => {
+    const k = normName(name);
+    if (!k || seen.has(k)) return;
+    seen.add(k);
+    out.push({ name: name.trim(), catId: catId || "other", custom: !!custom });
+  };
+  Object.keys(BASE_CATALOG).forEach(catId => BASE_CATALOG[catId].forEach(n => add(n, catId, false)));
+  CATEGORIES.forEach(c => foods[c.id].forEach(f => add(f.name || "", c.id, false)));
+  customCatalog.forEach(c => add(c.name || "", c.catId, true));
+  avoidGroups.forEach(g => (g.items || []).forEach(i => add(i || "", "other", false)));
+  return out;
+}
+
+function refreshCatalogDatalist() {
+  const dl = document.getElementById("catalog-names");
+  if (!dl) return;
+  dl.innerHTML = getCatalog().map(c => `<option value="${esc(c.name)}"></option>`).join("");
+}
+
+function isEncouraged(name) {
+  const k = normName(name);
+  if (!k) return false;
+  if (tryItems.some(t => normName(t.name) === k)) return true;
+  return CATEGORIES.some(c => foods[c.id].some(f => normName(f.name) === k && parseInt(f.score, 10) >= 7));
+}
+
+// Soft guess for custom items: does the name overlap with something on the Avoid tab?
+function findSimilarAvoid(name) {
+  const k = normName(name);
+  if (!k) return null;
+  const words = k.split(/[^a-z0-9]+/).filter(w => w.length >= 4);
+  for (const g of avoidGroups) {
+    for (const raw of (g.items || [])) {
+      const a = normName(raw);
+      if (!a) continue;
+      const aw = a.split(/[^a-z0-9]+/).filter(w => w.length >= 4);
+      if (a.includes(k) || k.includes(a) || words.some(w => aw.includes(w))) {
+        return `Looks similar to <strong>${esc(raw.trim())}</strong> in your avoid group "${esc(g.name || "unnamed")}".`;
+      }
+    }
+    const gw = normName(g.name).split(/[^a-z0-9]+/).filter(w => w.length >= 4);
+    if (gw.length && words.some(w => gw.includes(w))) {
+      return `Shares words with your avoid group <strong>${esc(g.name)}</strong>.`;
+    }
+  }
+  return null;
+}
+
+function catIdFor(name) {
+  const hit = getCatalog().find(c => normName(c.name) === normName(name));
+  return hit ? hit.catId : "other";
+}
+
+function getShopSuggestions() {
+  const onList = new Set(shopItems.filter(i => i.section === "me").map(i => normName(i.name)));
+  const seen = new Set();
+  const out = [];
+  const push = (name, catId) => {
+    const k = normName(name);
+    if (!k || onList.has(k) || seen.has(k) || getAvoidMatch(name)) return;
+    seen.add(k);
+    out.push({ name: name.trim(), catId: catId || catIdFor(name) });
+  };
+  CATEGORIES.forEach(c => foods[c.id].forEach(f => { if (parseInt(f.score, 10) >= 7) push(f.name || "", c.id); }));
+  tryItems.forEach(t => push(t.name || ""));
+  return out;
+}
+
+function addShopItem(name, catId, section, custom) {
+  const clean = (name || "").trim();
+  if (!clean) return;
+  if (shopItems.some(i => i.section === section && normName(i.name) === normName(clean))) return;
+  shopItems.push({
+    id: "s" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    name: clean, catId: catId || "other", section, custom: !!custom, checkedAvoid: false, done: false
+  });
+  saveToStorage();
+  renderShopTab();
+}
+
+function setShopTarget(t) {
+  shopTarget = t === "others" ? "others" : "me";
+  saveToStorage();
+  renderShopTab();
+}
+
+function buildShopResults(q) {
+  const k = normName(q);
+  if (!k) return [];
+  const cat = getCatalog();
+  const starts   = cat.filter(c => normName(c.name).startsWith(k));
+  const contains = cat.filter(c => !normName(c.name).startsWith(k) && normName(c.name).includes(k));
+  const res = starts.concat(contains).slice(0, 8);
+  if (!cat.some(c => normName(c.name) === k)) res.push({ name: q.trim(), catId: "other", custom: true, isNew: true });
+  return res;
+}
+
+function renderShopResults() {
+  const input = document.getElementById("shop-search");
+  const el = document.getElementById("shop-results");
+  if (!input || !el) return;
+  shopResults = buildShopResults(input.value);
+  if (!shopResults.length) { el.innerHTML = ""; return; }
+  const me = shopTarget === "me";
+  el.innerHTML = shopResults.map((r, i) => {
+    const onList = shopItems.some(s => s.section === shopTarget && normName(s.name) === normName(r.name));
+    const avoid = me && !r.isNew ? getAvoidMatch(r.name) : null;
+    const good  = me && !avoid && !r.isNew && isEncouraged(r.name);
+    const cat = SHOP_CATS.find(c => c.id === r.catId) || SHOP_CATS[SHOP_CATS.length - 1];
+    let mark = "";
+    if (avoid) mark = `<span class="shop-mark shop-mark-avoid" title="On your avoid list"><i class="ti ti-x"></i></span>`;
+    else if (good) mark = `<span class="shop-mark shop-mark-good" title="Encouraged"><i class="ti ti-check"></i></span>`;
+    const label = r.isNew
+      ? `<i class="ti ti-plus" style="font-size:13px;"></i> Add “${esc(r.name)}” as a custom item`
+      : `${esc(r.name)} <span class="shop-cat-tag">${esc(cat.label)}</span>`;
+    const note = r.custom && me ? `<span class="shop-cat-tag" style="color:var(--amber-dk);">needs Avoid check</span>` : "";
+    return `<button class="shop-result" ${onList ? "disabled" : ""} onclick="shopPick(${i})">
+      <span class="shop-result-name">${label}</span>${mark}${note}${onList ? `<span class="shop-cat-tag">on list</span>` : ""}
+    </button>`;
+  }).join("");
+}
+
+function shopPick(i) {
+  const r = shopResults[i];
+  if (!r) return;
+  if (r.isNew && !customCatalog.some(c => normName(c.name) === normName(r.name))) {
+    customCatalog.push({ name: r.name, catId: r.catId });
+  }
+  addShopItem(r.name, r.catId, shopTarget, r.custom);
+  const input = document.getElementById("shop-search");
+  if (input) { input.value = ""; input.focus(); }
+  renderShopResults();
+}
+
+function shopAddSuggestion(i) {
+  const s = getShopSuggestions()[i];
+  if (s) addShopItem(s.name, s.catId, "me", false);
+}
+
+function toggleShopDone(id) {
+  const it = shopItems.find(x => x.id === id);
+  if (!it) return;
+  if (it.section === "me" && it.custom && !it.checkedAvoid) return; // locked until Avoid tab is confirmed
+  it.done = !it.done;
+  saveToStorage();
+  renderShopTab();
+}
+
+function confirmShopCheck(id) {
+  const it = shopItems.find(x => x.id === id);
+  if (!it) return;
+  it.checkedAvoid = true;
+  saveToStorage();
+  renderShopTab();
+}
+
+function moveShopItem(id) {
+  const it = shopItems.find(x => x.id === id);
+  if (!it) return;
+  const to = it.section === "me" ? "others" : "me";
+  const dup = shopItems.find(x => x !== it && x.section === to && normName(x.name) === normName(it.name));
+  if (dup) {
+    shopItems = shopItems.filter(x => x !== it); // already on the other list — merge
+  } else {
+    it.section = to;
+    if (to === "me" && it.custom && !it.checkedAvoid) it.done = false;
+  }
+  saveToStorage();
+  renderShopTab();
+}
+
+function removeShopItem(id) {
+  shopItems = shopItems.filter(x => x.id !== id);
+  saveToStorage();
+  renderShopTab();
+}
+
+function clearDoneShop() {
+  shopItems = shopItems.filter(x => !x.done);
+  saveToStorage();
+  renderShopTab();
+}
+
+function shopRowHtml(item) {
+  const me = item.section === "me";
+  const avoid = me ? getAvoidMatch(item.name) : null;
+  const good = me && !avoid && isEncouraged(item.name);
+  const needsCheck = me && item.custom && !item.checkedAvoid;
+  const sim = needsCheck ? findSimilarAvoid(item.name) : null;
+  const moveTitle = me ? "Move to For others" : "Move to For me";
+  return `<div class="shop-item">
+    <div class="shop-row${avoid ? " shop-avoid" : ""}${item.done ? " shop-done" : ""}">
+      <button class="shop-tick" ${needsCheck ? "disabled" : ""} onclick="toggleShopDone('${item.id}')"
+        aria-label="${needsCheck ? "Locked until you confirm the Avoid check" : "Tick off"}"
+        title="${needsCheck ? "Confirm the Avoid check first" : "Tick off"}">
+        <i class="ti ${needsCheck ? "ti-lock" : item.done ? "ti-square-check" : "ti-square"}"></i>
+      </button>
+      <span class="shop-name">${esc(item.name)}</span>
+      ${avoid ? `<span class="shop-mark shop-mark-avoid" title="On your avoid list"><i class="ti ti-x"></i></span>` : ""}
+      ${good ? `<span class="shop-mark shop-mark-good" title="Encouraged"><i class="ti ti-check"></i></span>` : ""}
+      <button class="shop-mini" onclick="moveShopItem('${item.id}')" title="${moveTitle}" aria-label="${moveTitle}"><i class="ti ti-arrows-exchange"></i></button>
+      <button class="shop-mini" onclick="removeShopItem('${item.id}')" title="Remove" aria-label="Remove"><i class="ti ti-x"></i></button>
+    </div>
+    ${avoid ? `<div class="avoid-warning"><i class="ti ti-ban" style="font-size:11px;margin-top:2px;"></i><span><strong>${esc(avoid.groupName || "Foods to Avoid")}:</strong> ${esc(avoid.reason || "Listed in your Foods to Avoid.")}</span></div>` : ""}
+    ${needsCheck ? `<div class="shop-check">
+      <div><i class="ti ti-alert-triangle" style="font-size:13px;vertical-align:-2px;margin-right:3px;"></i>Custom item — check your Avoid tab to make sure it isn't contraindicated before ticking it off.</div>
+      ${sim ? `<div class="shop-sim">${sim}</div>` : ""}
+      <div class="shop-check-actions">
+        <button onclick="switchTab('avoid')"><i class="ti ti-ban"></i>Open Avoid tab</button>
+        <button onclick="confirmShopCheck('${item.id}')"><i class="ti ti-check"></i>I've checked</button>
+      </div>
+    </div>` : ""}
+  </div>`;
+}
+
+function renderShopSection(section) {
+  const items = shopItems.filter(i => i.section === section);
+  if (!items.length) {
+    return `<p class="shop-empty">${section === "me" ? "Nothing here yet." : "Nothing here yet."}</p>`;
+  }
+  const knownIds = SHOP_CATS.map(c => c.id);
+  return SHOP_CATS.map(cat => {
+    const rows = items.filter(i => (knownIds.indexOf(i.catId) === -1 ? "other" : i.catId) === cat.id);
+    if (!rows.length) return "";
+    return `<div class="shop-cat-label"><i class="ti ${cat.icon}"></i>${esc(cat.label)}</div>${rows.map(shopRowHtml).join("")}`;
+  }).join("");
+}
+
+function renderShopTab() {
+  const seg = document.getElementById("shop-target");
+  if (!seg) return;
+  refreshCatalogDatalist();
+
+  seg.innerHTML = `
+    <button class="${shopTarget === "me" ? "active" : ""}" onclick="setShopTarget('me')"><i class="ti ti-user"></i>Adding to: For me</button>
+    <button class="${shopTarget === "others" ? "active" : ""}" onclick="setShopTarget('others')"><i class="ti ti-users"></i>Adding to: For others</button>`;
+
+  const sug = getShopSuggestions();
+  const sugEl = document.getElementById("shop-suggest");
+  sugEl.innerHTML = sug.length
+    ? `<div class="shop-suggest-title"><i class="ti ti-stars" style="font-size:13px;"></i>Suggested for you</div>
+       <div class="shop-chips">${sug.map((s, i) => `<button class="shop-chip" onclick="shopAddSuggestion(${i})"><i class="ti ti-plus" style="font-size:12px;"></i>${esc(s.name)}</button>`).join("")}</div>`
+    : "";
+
+  renderShopResults();
+
+  const meCount = shopItems.filter(i => i.section === "me").length;
+  const otCount = shopItems.filter(i => i.section === "others").length;
+  document.getElementById("shop-lists").innerHTML = `
+    <div class="card shop-section">
+      <div class="shop-section-title"><i class="ti ti-user"></i>For me <span class="pill pill-gray">${meCount}</span></div>
+      ${renderShopSection("me")}
+    </div>
+    <div class="card shop-section">
+      <div class="shop-section-title"><i class="ti ti-users"></i>For others <span class="pill pill-gray">${otCount}</span></div>
+      ${renderShopSection("others")}
+    </div>`;
+}
 
 // Load persisted data then render
 loadFromStorage();
@@ -1342,5 +1531,6 @@ renderFoods();
 loadBodyFromStorage();
 renderTryList();
 renderAvoidList();
+renderShopTab();
 renderHealthPanel();
 renderTimingPanel();
