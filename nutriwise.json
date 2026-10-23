@@ -1,9 +1,9 @@
 {
-  "name": "NutriWise",
-  "short_name": "NutriWise",
+  "name": "HealthCobber",
+  "short_name": "HealthCobber",
   "description": "Personal food intelligence — suitability analysis, timing, triggers, and AI-powered meal planning based on your body metrics and food preferences.",
   "version": "1.0.0",
-  "author": "NutriWise",
+  "author": "HealthCobber",
   "homepage": "index.html",
   "categories": ["health", "food", "lifestyle", "fitness"],
   "api": {

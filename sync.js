@@ -1,4 +1,4 @@
-// ── NutriWise Cloud Sync ─────────────────────────────────────────────────────
+// ── HealthCobber Cloud Sync ─────────────────────────────────────────────────────
 // Adds optional encrypted backup/sync on top of the existing localStorage flow.
 // Nothing here changes how the app works if you never tap "Sync".
 //
@@ -73,7 +73,7 @@ async function unlockEncryption(remoteSaltB64) {
   const existingSalt = remoteSaltB64 || getLocalSalt();
   const passphrase = prompt(
     existingSalt
-      ? "Enter your NutriWise sync passphrase:"
+      ? "Enter your HealthCobber sync passphrase:"
       : "Choose a sync passphrase (used to encrypt your data — write it down, it can't be recovered if lost):"
   );
   if (!passphrase) return false;
@@ -193,6 +193,7 @@ async function pullFromCloud() {
     renderShopTab();
     renderTimingPanel();
     renderInsightsList();
+    renderSleepOverview();
     updateSyncUI();
   } catch (e) {
     alert("Sync pull error: " + e.message + " (likely wrong passphrase — try again with the exact passphrase you set originally)");
@@ -245,7 +246,7 @@ async function handleSyncButtonClick() {
     await pullFromCloud();
     return;
   }
-  const email = prompt("Enter your email to sync NutriWise across devices:");
+  const email = prompt("Enter your email to sync HealthCobber across devices:");
   if (!email) return;
   const error = await sendMagicLink(email);
   if (error) alert("Couldn't send link: " + error.message);

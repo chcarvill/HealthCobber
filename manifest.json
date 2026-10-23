@@ -1,7 +1,7 @@
 {
-  "name": "NutriWise",
-  "short_name": "NutriWise",
-  "description": "Personal food intelligence & meal planning",
+  "name": "HealthCobber",
+  "short_name": "HealthCobber",
+  "description": "Your personal health companion",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

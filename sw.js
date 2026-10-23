@@ -4,7 +4,7 @@
 // offline; everything else (your food/avoid/body data) lives in
 // localStorage/IndexedDB via the sync flow already in app.js, not here.
 
-const CACHE_NAME = "nutriwise-shell-v2";
+const CACHE_NAME = "healthcobber-shell-v2";
 const APP_SHELL = [
   "./",
   "./index.html",

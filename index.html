@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>NutriWise — Personal Food Intelligence</title>
+  <title>HealthCobber — Your Personal Health Companion</title>
   <meta name="description" content="Food suitability, timing, triggers and AI-powered meal plans based on your body metrics and preferences." />
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#1D9E75" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <meta name="apple-mobile-web-app-title" content="NutriWise" />
+  <meta name="apple-mobile-web-app-title" content="HealthCobber" />
   <link rel="icon" type="image/png" href="icon192.png" />
   <link rel="apple-touch-icon" href="icon192.png" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" />
@@ -808,15 +808,60 @@
     .item-chip.on-sleep { background: var(--blue-lt); color: var(--blue-dk); border-color: var(--blue); }
     .item-chip.on-habit { background: var(--gray-lt); color: var(--gray-dk); border-color: #888; }
     .filter-bar { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+
+    /* Two-level navigation: top-level sections + per-section sub-tabs */
+    nav.main-tabs {
+      display: flex;
+      gap: 2px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .main-tab {
+      flex: 1;
+      padding: 10px 2px 9px;
+      font-size: 12px;
+      font-weight: 500;
+      font-family: inherit;
+      border: none;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -1px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .main-tab i { display: block; font-size: 20px; margin-bottom: 3px; }
+    .main-tab:hover { color: var(--text); }
+    .main-tab.active { color: var(--green); border-bottom-color: var(--green); font-weight: 600; }
+    nav.sub-tabs[hidden] { display: none; }
+    .soon-card { text-align: center; padding: 36px 20px; }
+    .soon-card i { font-size: 34px; color: var(--muted); }
+    .soon-card h2 { margin: 10px 0 6px; }
+    .soon-card p { font-size: 13px; color: var(--muted); }
+
+    /* Sleep overview */
+    .so-row { padding: 10px 0; border-bottom: 0.5px solid var(--border); }
+    .so-row:last-child { border-bottom: none; padding-bottom: 0; }
+    .so-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .so-name { font-size: 13px; font-weight: 600; }
+    .so-reason { font-size: 12px; color: var(--muted); margin-top: 3px; line-height: 1.45; }
+    .so-items { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+    .src-link {
+      display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0;
+      font-size: 11px; font-weight: 500; font-family: inherit;
+      color: var(--muted); background: transparent; border: none; cursor: pointer; padding: 2px 0;
+    }
+    .src-link:hover { color: var(--green); }
+    .src-link i { font-size: 12px; }
   </style>
 </head>
 <body>
 
 <header>
-  <img src="icon192.png" alt="NutriWise logo" />
+  <img src="icon192.png" alt="HealthCobber logo" />
   <div>
-    <h1>NutriWise</h1>
-    <p>Personal food intelligence &amp; meal planning</p>
+    <h1>HealthCobber</h1>
+    <p>Your personal health companion</p>
   </div>
   <button class="btn-email header-backup-btn" onclick="emailEverything()" title="Email yourself a full backup of all your data">
     <i class="ti ti-mail"></i> Backup
@@ -825,7 +870,27 @@
 
 <main class="app">
 
-  <nav class="tabs" aria-label="App sections">
+  <!-- TOP-LEVEL SECTIONS -->
+  <nav class="main-tabs" aria-label="Sections">
+    <button class="main-tab active" data-section="diet" onclick="switchSection('diet')" aria-selected="true">
+      <i class="ti ti-salad" aria-hidden="true"></i>Diet
+    </button>
+    <button class="main-tab" data-section="sleep" onclick="switchSection('sleep')" aria-selected="false">
+      <i class="ti ti-moon-stars" aria-hidden="true"></i>Sleep
+    </button>
+    <button class="main-tab" data-section="exercise" onclick="switchSection('exercise')" aria-selected="false">
+      <i class="ti ti-run" aria-hidden="true"></i>Exercise
+    </button>
+    <button class="main-tab" data-section="mind" onclick="switchSection('mind')" aria-selected="false">
+      <i class="ti ti-brain" aria-hidden="true"></i>Mind
+    </button>
+    <button class="main-tab" data-section="medication" onclick="switchSection('medication')" aria-selected="false">
+      <i class="ti ti-pill" aria-hidden="true"></i>Medication
+    </button>
+  </nav>
+
+  <!-- DIET SUB-TABS -->
+  <nav class="tabs sub-tabs" data-section="diet" aria-label="Diet sections">
     <button class="nav-btn nav-btn-health" onclick="switchTab('health')" id="tab-health">
       <i class="ti ti-heart-rate-monitor" aria-hidden="true"></i>My Health
     </button>
@@ -852,6 +917,13 @@
     </button>
     <button class="nav-btn" onclick="switchTab('timing')" id="tab-timing">
       <i class="ti ti-clock" aria-hidden="true"></i>Timing
+    </button>
+  </nav>
+
+  <!-- SLEEP SUB-TABS -->
+  <nav class="tabs sub-tabs" data-section="sleep" aria-label="Sleep sections" hidden>
+    <button class="nav-btn" onclick="switchTab('overview')" id="tab-overview">
+      <i class="ti ti-layout-dashboard" aria-hidden="true"></i>Overview
     </button>
     <button class="nav-btn" onclick="switchTab('insights')" id="tab-insights">
       <i class="ti ti-bulb" aria-hidden="true"></i>Insights
@@ -1084,6 +1156,11 @@
     </button>
   </section>
 
+  <!-- SLEEP OVERVIEW PANEL — read-only roll-up of everything tagged for sleep -->
+  <section class="panel" id="panel-overview" aria-label="Sleep overview">
+    <div id="sleep-overview"></div>
+  </section>
+
   <!-- INSIGHTS PANEL — non-diet things that affect how you feel -->
   <section class="panel" id="panel-insights" aria-label="Insights">
     <div class="info-box" style="margin-bottom:14px;">
@@ -1101,10 +1178,37 @@
     </button>
   </section>
 
+  <!-- EXERCISE — placeholder -->
+  <section class="panel" id="panel-exercise" aria-label="Exercise">
+    <div class="card soon-card">
+      <i class="ti ti-run" aria-hidden="true"></i>
+      <h2>Exercise</h2>
+      <p>Coming soon. This section will get its own tabs, just like Diet and Sleep.</p>
+    </div>
+  </section>
+
+  <!-- MIND — placeholder -->
+  <section class="panel" id="panel-mind" aria-label="Mind">
+    <div class="card soon-card">
+      <i class="ti ti-brain" aria-hidden="true"></i>
+      <h2>Mind</h2>
+      <p>Coming soon. This section will get its own tabs, just like Diet and Sleep.</p>
+    </div>
+  </section>
+
+  <!-- MEDICATION — placeholder -->
+  <section class="panel" id="panel-medication" aria-label="Medication">
+    <div class="card soon-card">
+      <i class="ti ti-pill" aria-hidden="true"></i>
+      <h2>Medication</h2>
+      <p>Coming soon. This section will get its own tabs, just like Diet and Sleep.</p>
+    </div>
+  </section>
+
 </main>
 
 <footer>
-  NutriWise &mdash; for informational purposes only. Consult a qualified dietitian for personalised medical nutrition advice.
+  HealthCobber &mdash; for informational purposes only. Consult a qualified health professional for personalised advice.
 </footer>
 
 <script src="app.js"></script>
