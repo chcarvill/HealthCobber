@@ -19,6 +19,7 @@ let bodyData = {};
 let tryItems     = [];  // [{ name, reason }]
 let avoidGroups  = [];  // [{ name, reason, items: [foodName, ...] }] — a shared reason across a cluster of foods/drinks
 let triggerItems = [];  // [{ name, reason }] — situations/feelings that mean it's not really hunger
+let insightItems = [];  // [{ name, reason, sleep }] — non-diet things that affect how you feel (sleep hygiene etc.)
 
 // ── Local storage ────────────────────────────────────────────────────────────
 
@@ -30,6 +31,8 @@ const LS_AVOID         = "nutriwise_avoid";
 const LS_TRIGGERS      = "nutriwise_triggers";
 const LS_TRIGGERS_SEED = "nutriwise_triggers_seeded";
 const LS_SHOP          = "nutriwise_shop";
+const LS_INSIGHTS      = "nutriwise_insights";
+const LS_INSIGHTS_SEED = "nutriwise_insights_seeded";
 
 const MEAL_CYCLE = ["", "B", "L", "D", "LD"];
 const MEAL_LABELS = { "": "—", "B": "B", "L": "L", "D": "D", "LD": "LD" };
@@ -41,6 +44,7 @@ function saveToStorage() {
     localStorage.setItem(LS_TRY,      JSON.stringify(tryItems));
     localStorage.setItem(LS_AVOID,    JSON.stringify(avoidGroups));
     localStorage.setItem(LS_TRIGGERS, JSON.stringify(triggerItems));
+    localStorage.setItem(LS_INSIGHTS, JSON.stringify(insightItems));
     localStorage.setItem(LS_SHOP,     JSON.stringify({ items: shopItems, custom: customCatalog, target: shopTarget }));
   } catch (e) {}
 }
@@ -81,7 +85,10 @@ function loadFromStorage() {
       customCatalog = Array.isArray(d.custom) ? d.custom : [];
       shopTarget    = d.target === "others" ? "others" : "me";
     }
+    const ins = localStorage.getItem(LS_INSIGHTS);
+    if (ins) insightItems = JSON.parse(ins);
     seedTriggersIfNeeded();
+    seedInsightsIfNeeded();
   } catch (e) {}
 }
 
@@ -112,6 +119,7 @@ function switchTab(t) {
   if (t === "shop")   renderShopTab();
   if (t === "health") renderHealthPanel();
   if (t === "timing") renderTimingPanel();
+  if (t === "insights") renderInsightsList();
 }
 
 // ── BMI calculation ──────────────────────────────────────────────────────────
@@ -197,7 +205,7 @@ function getAvoidMatch(name) {
   const lower = name.trim().toLowerCase();
   for (const group of avoidGroups) {
     const hit = (group.items || []).find(i => i && i.trim().toLowerCase() === lower);
-    if (hit) return { reason: group.reason, groupName: group.name };
+    if (hit) return { reason: group.reason, groupName: group.name, sleep: !!group.sleep };
   }
   return null;
 }
@@ -216,7 +224,7 @@ function renderFoods() {
       const meal = item.meal || "";
       const avoidMatch = getAvoidMatch(item.name);
       const avoidBanner = avoidMatch
-        ? `<div class="avoid-warning"><i class="ti ti-ban" style="font-size:11px;vertical-align:-1px;margin-right:4px;"></i><strong>Foods to Avoid:</strong> ${avoidMatch.reason ? avoidMatch.reason : "Listed in your Foods to Avoid."}</div>`
+        ? `<div class="avoid-warning"><i class="ti ti-ban" style="font-size:11px;vertical-align:-1px;margin-right:4px;"></i><strong>Foods to Avoid:</strong> ${avoidMatch.reason ? avoidMatch.reason : "Listed in your Foods to Avoid."}${avoidMatch.sleep ? ` <span class="pill pill-blue" style="margin-left:4px;"><i class="ti ti-moon-stars" style="font-size:11px;"></i>Disrupts sleep</span>` : ""}</div>`
         : "";
       rowsHtml += `<div class="food-row-wrap${avoidMatch ? " avoid-flagged" : ""}">
         <div class="food-row">
@@ -619,40 +627,86 @@ function emailMealPlan() {
   openMailto("NutriWise — My Recommendations", lines.join("\n"));
 }
 
-// ── Foods to Try ──────────────────────────────────────────────────────────────
+// ── Shared helpers: sleep tag chips + "sleep only" filter ───────────────────
+// Used by Do More, Avoid and Insights. Each item/group carries an optional
+// `sleep: true` flag. The chip's wording depends on the page (Do More and
+// Insights = "Helps sleep", Avoid = "Disrupts sleep"); the flag is the same.
+
+const sleepFilter = { try: false, avoid: false, insights: false };
+
+function itemChip(kind, on, handler, label) {
+  const icon = kind === "sleep" ? "ti-moon-stars" : "ti-walk";
+  return `<button type="button" class="item-chip${on ? " on-" + kind : ""}" onclick="${handler}" aria-pressed="${on ? "true" : "false"}">
+    <i class="ti ${icon}" aria-hidden="true"></i>${label}</button>`;
+}
+
+function sleepFilterBarHtml(key, anyTagged) {
+  if (!anyTagged && !sleepFilter[key]) return "";
+  const on = sleepFilter[key];
+  return `<div class="filter-bar">
+    <button type="button" class="item-chip${on ? " on-sleep" : ""}" onclick="toggleSleepFilter('${key}')" aria-pressed="${on ? "true" : "false"}">
+      <i class="ti ti-moon-stars" aria-hidden="true"></i>${on ? "Showing sleep only" : "Show sleep only"}
+    </button>
+  </div>`;
+}
+
+function toggleSleepFilter(key) {
+  sleepFilter[key] = !sleepFilter[key];
+  if (key === "try")      renderTryList();
+  if (key === "avoid")    renderAvoidList();
+  if (key === "insights") renderInsightsList();
+}
+
+const NO_SLEEP_TAGS_MSG = `<p style="font-size:13px;color:var(--muted);padding:8px 0;">Nothing is tagged for sleep yet.</p>`;
+
+// ── Do More (formerly "Foods to Try") ────────────────────────────────────────
+// Foods, drinks or habits worth doing more of. Storage key/functions keep their
+// old "try" names so existing saved data carries over untouched.
+// Optional flags per item: sleep (helps sleep), habit (not a food — so it's
+// kept out of the Shop tab's suggestions).
 
 function renderTryList() {
   const el = document.getElementById("try-list");
   if (!el) return;
   if (!tryItems.length) {
-    el.innerHTML = `<p style="font-size:13px;color:var(--muted);padding:8px 0;">No foods added yet — tap below to start your list.</p>`;
+    el.innerHTML = `<p style="font-size:13px;color:var(--muted);padding:8px 0;">Nothing added yet — tap below to start your list.</p>`;
     return;
   }
-  el.innerHTML = tryItems.map((item, idx) => `
+  const rows = tryItems.map((item, idx) => {
+    if (sleepFilter.try && !item.sleep) return "";
+    return `
     <div class="try-row">
       <div class="try-fields">
-        <input class="try-food-input" type="text" placeholder="Food name…" value="${item.name || ""}"
+        <input class="try-food-input" type="text" placeholder="Food, drink or habit…" value="${esc(item.name)}"
           oninput="updateTryItem(${idx},'name',this.value)" />
-        <textarea class="try-reason-input" placeholder="Why is it beneficial? (e.g. high in omega-3, anti-inflammatory, gut health…)"
-          oninput="updateTryItem(${idx},'reason',this.value)">${item.reason || ""}</textarea>
+        <textarea class="try-reason-input" placeholder="Why is it beneficial? (e.g. high in omega-3, aids sleep quality, gut health…)"
+          oninput="updateTryItem(${idx},'reason',this.value)">${esc(item.reason)}</textarea>
+        <div class="item-chips">
+          ${itemChip("sleep", item.sleep, `toggleTryFlag(${idx},'sleep')`, "Helps sleep")}
+          ${itemChip("habit", item.habit, `toggleTryFlag(${idx},'habit')`, "Habit, not a food")}
+        </div>
       </div>
       <button class="try-del-btn" onclick="removeTryItem(${idx})" aria-label="Remove">
         <i class="ti ti-x"></i>
       </button>
-    </div>`).join("");
+    </div>`;
+  }).join("");
+  el.innerHTML = sleepFilterBarHtml("try", tryItems.some(t => t.sleep)) + (rows || NO_SLEEP_TAGS_MSG);
 }
 
 function addTryItem()                        { tryItems.push({ name:"", reason:"" }); renderTryList(); saveToStorage(); }
 function removeTryItem(idx)                  { tryItems.splice(idx, 1); renderTryList(); saveToStorage(); }
 function updateTryItem(idx, field, val)      { tryItems[idx][field] = val; saveToStorage(); }
+function toggleTryFlag(idx, flag)            { tryItems[idx][flag] = !tryItems[idx][flag]; saveToStorage(); renderTryList(); }
 
 function buildTryListText() {
   const valid = tryItems.filter(t => t.name && t.name.trim());
   if (!valid.length) return null;
-  const lines = ["NUTRIWISE — FOODS TO TRY", "=".repeat(40), ""];
+  const lines = ["NUTRIWISE — DO MORE", "=".repeat(40), ""];
   valid.forEach((t, i) => {
     lines.push(`${i + 1}. ${t.name}`);
     if (t.reason) lines.push(`   Why: ${t.reason}`);
+    if (t.sleep)  lines.push(`   Sleep: helps sleep`);
     lines.push("");
   });
   lines.push("-".repeat(40), "Generated by NutriWise — for informational purposes only.", "Consult a qualified dietitian for personalised medical nutrition advice.");
@@ -661,8 +715,8 @@ function buildTryListText() {
 
 function emailTryList() {
   const body = buildTryListText();
-  if (!body) { alert("No foods in your list yet."); return; }
-  openMailto("NutriWise — Foods to Try", body);
+  if (!body) { alert("Nothing in your Do More list yet."); return; }
+  openMailto("NutriWise — Do More", body);
 }
 
 // ── Foods to Avoid ────────────────────────────────────────────────────────────
@@ -674,21 +728,26 @@ function renderAvoidList() {
     el.innerHTML = `<p style="font-size:13px;color:var(--muted);padding:8px 0;">No groups added yet — tap below to build your avoidance list.</p>`;
     return;
   }
-  el.innerHTML = avoidGroups.map((group, gi) => `
+  const cards = avoidGroups.map((group, gi) => {
+    if (sleepFilter.avoid && !group.sleep) return "";
+    return `
     <div class="avoid-group-card">
       <div class="avoid-group-header">
-        <input class="try-food-input avoid-group-name" type="text" placeholder="Group name (e.g. Sugary drinks)…" value="${group.name || ""}"
+        <input class="try-food-input avoid-group-name" type="text" placeholder="Group name (e.g. Sugary drinks)…" value="${esc(group.name)}"
           oninput="updateAvoidGroup(${gi},'name',this.value)" />
         <button class="try-del-btn" onclick="removeAvoidGroup(${gi})" aria-label="Remove group" title="Remove this whole group">
           <i class="ti ti-trash"></i>
         </button>
       </div>
-      <textarea class="try-reason-input" placeholder="Why avoid these? (shared reason, e.g. spikes blood sugar, triggers reflux…)"
-        oninput="updateAvoidGroup(${gi},'reason',this.value)">${group.reason || ""}</textarea>
+      <textarea class="try-reason-input" placeholder="Why avoid these? (shared reason, e.g. spikes blood sugar, triggers reflux, keeps you awake…)"
+        oninput="updateAvoidGroup(${gi},'reason',this.value)">${esc(group.reason)}</textarea>
+      <div class="item-chips" style="margin-top:6px;">
+        ${itemChip("sleep", group.sleep, `toggleAvoidSleep(${gi})`, "Disrupts sleep")}
+      </div>
       <div class="avoid-group-items">
         ${(group.items || []).map((name, ii) => `
           <div class="avoid-item-row">
-            <input class="avoid-item-input" type="text" list="catalog-names" placeholder="Pick from the catalog or type…" value="${name || ""}"
+            <input class="avoid-item-input" type="text" list="catalog-names" placeholder="Pick from the catalog or type…" value="${esc(name)}"
               oninput="updateAvoidGroupItem(${gi},${ii},this.value)" />
             <button class="try-del-btn" onclick="removeAvoidGroupItem(${gi},${ii})" aria-label="Remove item">
               <i class="ti ti-x"></i>
@@ -698,7 +757,16 @@ function renderAvoidList() {
       <button class="add-food-btn avoid-add-item-btn" onclick="addAvoidGroupItem(${gi})">
         <i class="ti ti-plus" style="font-size:13px;"></i>Add item to this group
       </button>
-    </div>`).join("");
+    </div>`;
+  }).join("");
+  el.innerHTML = sleepFilterBarHtml("avoid", avoidGroups.some(g => g.sleep)) + (cards || NO_SLEEP_TAGS_MSG);
+}
+
+function toggleAvoidSleep(gi) {
+  avoidGroups[gi].sleep = !avoidGroups[gi].sleep;
+  saveToStorage();
+  renderAvoidList();
+  renderFoods(); // My foods banner shows the sleep pill too
 }
 
 function addAvoidGroup() {
@@ -748,6 +816,7 @@ function buildAvoidListText() {
   valid.forEach((g, i) => {
     lines.push(`${i + 1}. ${g.name || "(Unnamed group)"}`);
     if (g.reason) lines.push(`   Reason: ${g.reason}`);
+    if (g.sleep)  lines.push(`   Sleep: disrupts sleep`);
     g.items.forEach(item => lines.push(`   • ${item}`));
     lines.push("");
   });
@@ -759,6 +828,90 @@ function emailAvoidList() {
   const body = buildAvoidListText();
   if (!body) { alert("No foods in your avoid list yet."); return; }
   openMailto("NutriWise — Foods & Drinks to Avoid", body);
+}
+
+// ── Insights ─────────────────────────────────────────────────────────────────
+// Non-diet things that affect how you feel — mostly sleep-related habits and
+// environment. Same shape as Do More: { name, reason, sleep }. Pre-seeded once
+// with a few starters (never re-seeded, so deleting them stays deleted).
+
+const DEFAULT_INSIGHTS = [
+  { name: "Wear less to bed",
+    reason: "Falling asleep goes along with your core temperature dropping. Lighter clothing and bedding make that easier.",
+    sleep: true },
+  { name: "Keep bed linen clean",
+    reason: "Fresh linen means less dust and allergen build-up against your skin and airways, and it's simply nicer to sleep in.",
+    sleep: true },
+  { name: "Open the curtains first thing",
+    reason: "Bright morning daylight helps set your body clock, which supports feeling sleepy at the right time that night.",
+    sleep: true },
+  { name: "Dim the lights in the evening",
+    reason: "Lower light in the hour or two before bed helps your body wind down.",
+    sleep: true },
+  { name: "Keep a steady wake-up time",
+    reason: "A regular wake time keeps your body clock consistent, which tends to improve sleep quality over time.",
+    sleep: true },
+];
+
+function seedInsightsIfNeeded() {
+  if (!localStorage.getItem(LS_INSIGHTS_SEED)) {
+    if (!insightItems.length) insightItems = DEFAULT_INSIGHTS.map(i => ({ ...i }));
+    localStorage.setItem(LS_INSIGHTS_SEED, "1");
+    saveToStorage();
+  }
+}
+
+function renderInsightsList() {
+  const el = document.getElementById("insights-list");
+  if (!el) return;
+  if (!insightItems.length) {
+    el.innerHTML = `<p style="font-size:13px;color:var(--muted);padding:8px 0;">No insights yet — tap below to add one.</p>`;
+    return;
+  }
+  const rows = insightItems.map((item, idx) => {
+    if (sleepFilter.insights && !item.sleep) return "";
+    return `
+    <div class="try-row">
+      <div class="try-fields">
+        <input class="try-food-input" type="text" placeholder="Something to do or change…" value="${esc(item.name)}"
+          oninput="updateInsightItem(${idx},'name',this.value)" />
+        <textarea class="try-reason-input" placeholder="Why does it help? (optional)"
+          oninput="updateInsightItem(${idx},'reason',this.value)">${esc(item.reason)}</textarea>
+        <div class="item-chips">
+          ${itemChip("sleep", item.sleep, `toggleInsightSleep(${idx})`, "Helps sleep")}
+        </div>
+      </div>
+      <button class="try-del-btn" onclick="removeInsightItem(${idx})" aria-label="Remove">
+        <i class="ti ti-x"></i>
+      </button>
+    </div>`;
+  }).join("");
+  el.innerHTML = sleepFilterBarHtml("insights", insightItems.some(t => t.sleep)) + (rows || NO_SLEEP_TAGS_MSG);
+}
+
+function addInsightItem()                    { insightItems.push({ name:"", reason:"" }); renderInsightsList(); saveToStorage(); }
+function removeInsightItem(idx)              { insightItems.splice(idx, 1); renderInsightsList(); saveToStorage(); }
+function updateInsightItem(idx, field, val)  { insightItems[idx][field] = val; saveToStorage(); }
+function toggleInsightSleep(idx)             { insightItems[idx].sleep = !insightItems[idx].sleep; saveToStorage(); renderInsightsList(); }
+
+function buildInsightsText() {
+  const valid = insightItems.filter(t => t.name && t.name.trim());
+  if (!valid.length) return null;
+  const lines = ["NUTRIWISE — INSIGHTS", "=".repeat(40), ""];
+  valid.forEach((t, i) => {
+    lines.push(`${i + 1}. ${t.name}`);
+    if (t.reason) lines.push(`   Why: ${t.reason}`);
+    if (t.sleep)  lines.push(`   Sleep: helps sleep`);
+    lines.push("");
+  });
+  lines.push("-".repeat(40), "Generated by NutriWise — for informational purposes only.");
+  return lines.join("\n");
+}
+
+function emailInsights() {
+  const body = buildInsightsText();
+  if (!body) { alert("No insights in your list yet."); return; }
+  openMailto("NutriWise — Insights", body);
 }
 
 // ── Timing — when not to eat ─────────────────────────────────────────────────
@@ -957,7 +1110,8 @@ function emailEverything() {
     buildFoodsDataText(),
     buildTryListText(),
     buildAvoidListText(),
-    buildTriggerListText()
+    buildTriggerListText(),
+    buildInsightsText()
   ].filter(Boolean); // drop any section with no data yet
 
   if (!sections.length) {
@@ -1289,7 +1443,7 @@ function refreshCatalogDatalist() {
 function isEncouraged(name) {
   const k = normName(name);
   if (!k) return false;
-  if (tryItems.some(t => normName(t.name) === k)) return true;
+  if (tryItems.some(t => !t.habit && normName(t.name) === k)) return true;
   return CATEGORIES.some(c => foods[c.id].some(f => normName(f.name) === k && parseInt(f.score, 10) >= 7));
 }
 
@@ -1331,7 +1485,7 @@ function getShopSuggestions() {
     out.push({ name: name.trim(), catId: catId || catIdFor(name) });
   };
   CATEGORIES.forEach(c => foods[c.id].forEach(f => { if (parseInt(f.score, 10) >= 7) push(f.name || "", c.id); }));
-  tryItems.forEach(t => push(t.name || ""));
+  tryItems.forEach(t => { if (!t.habit) push(t.name || ""); });
   return out;
 }
 
@@ -1571,3 +1725,4 @@ renderAvoidList();
 renderShopTab();
 renderHealthPanel();
 renderTimingPanel();
+renderInsightsList();
